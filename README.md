@@ -9,3 +9,4 @@ Hands-on AI engineering projects and experiments, organized by week.
 ## Sources
 
 - [AI Agent Evaluation](https://deepeval.com/guides/guides-ai-agent-evaluation)
+- [How context windows work](https://www.youtube.com/watch?v=-uW5-TaVXu4)
