@@ -4,7 +4,7 @@ Hands-on AI engineering projects and experiments, organized by week.
 
 ## Projects
 
-- [Week 1: Tool-Calling Chat Agent](1-week/README.md)
+- [Week 1: Tool-Calling Chat Agent](1-week/README.md) — Build an interactive terminal agent that maintains conversation history, selects and executes local tools, and communicates with OpenRouter through the OpenAI Python SDK.
 
 ## Sources
 
