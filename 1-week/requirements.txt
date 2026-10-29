@@ -1,1 +1,2 @@
+deepeval==4.3.2
 openai==3.36.1

@@ -1,4 +1,5 @@
 .env
+.deepeval/
 .venv/
 __pycache__/
 *.py[cod]

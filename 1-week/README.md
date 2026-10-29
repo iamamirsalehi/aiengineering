@@ -250,38 +250,45 @@ Use grep to find lines containing "error" in logs/app.txt.
 
 ## Evaluations
 
-The evaluations test the model's first tool-selection decision in isolation.
-For each case, the evaluator sends one prompt and the available tool definitions
-to the model, inspects `tool_calls`, and stops. It never executes the weather
-tool and therefore makes no Open-Meteo requests.
+The evaluation suite uses [DeepEval](https://deepeval.com/) with OpenRouter as
+both the agent provider and the LLM-judge provider. The cases are stored as
+DeepEval `Golden` or `ConversationalGolden` objects and converted to
+`LLMTestCase` or `ConversationalTestCase` objects after each agent run.
 
 ```text
 evals/
-├── llm_judge.py
-├── multi_turn_eval_case.py
-├── multi_turn_evaluator.py
+├── deepeval_utils.py
 ├── recording_tool_registry.py
-├── tool_choice_evaluator.py
-├── tool_eval_case.py
 └── weather_tool/
-    ├── eval_multi_turn.py
-    ├── eval_tool_selection.py
-    └── mock_weather_tool.py
+    ├── mock_weather_tool.py
+    ├── test_agent_responses.py
+    ├── test_multi_turn_conversations.py
+    ├── test_tool_selection.py
+    └── weather_fixtures.py
 ```
 
-The shared files provide the evaluation engine and case structure. Tool-specific
-cases and runners live in a directory named after their tool.
+`ToolCorrectnessMetric` checks the exact tool list and normalized input
+parameters. `GEval` checks that complete-agent answers satisfy the case-specific
+requirements and remain grounded in the fixed tool output. True multi-turn
+conversations use DeepEval `ConversationalTestCase` objects and conversational
+metrics.
 
-### Running the weather-tool eval
+### Running the evals
 
 From the project root, run:
 
 ```bash
 source .venv/bin/activate
-python -m evals.weather_tool.eval_tool_selection
+deepeval test run evals/weather_tool
 ```
 
-The current suite contains 14 cases covering:
+Run only the first-decision tool-routing suite with:
+
+```bash
+deepeval test run evals/weather_tool/test_tool_selection.py
+```
+
+This suite contains 14 cases covering:
 
 - Prompts that should call `get_weather`.
 - Prompts that should not call any tool.
@@ -289,9 +296,8 @@ The current suite contains 14 cases covering:
 - Missing locations, historical weather, forecasts, climate questions, and
   general knowledge.
 
-The evaluator scores tool selection and city arguments separately. It prints
-the expected decision, actual decision, and model used for every case, followed
-by a summary.
+It stops after the first model response, so it never executes the weather tool
+or calls Open-Meteo.
 
 ### Selecting the evaluation model
 
@@ -302,7 +308,7 @@ For repeatable results, pin a tool-capable model for the eval:
 
 ```bash
 EVAL_MODEL="provider/model-name" \
-python -m evals.weather_tool.eval_tool_selection
+deepeval test run evals/weather_tool/test_tool_selection.py
 ```
 
 You can also put the override in `.env`:
@@ -311,27 +317,27 @@ You can also put the override in `.env`:
 EVAL_MODEL=provider/model-name
 ```
 
-The eval makes one live OpenRouter request per case. The current suite therefore
-makes 14 model requests.
+The tool-routing suite makes one live OpenRouter request per case. DeepEval's
+strict tool metric is deterministic for these cases and does not make a judge
+request.
 
-### Running the weather multi-turn eval
+### Evaluating complete single-interaction responses
 
-The multi-turn suite runs the complete agent loop against a deterministic mock
-weather tool. It checks the ordered tool-call trace with normal code assertions,
-then sends the final answer to a separate LLM judge. The mock returns fixed
-weather data and never calls Open-Meteo.
+The complete-agent suite runs the model-tool-model loop against a deterministic
+mock weather tool. The mock returns fixed weather data and never calls
+Open-Meteo.
 
 Run it with:
 
 ```bash
 EVAL_MODEL="provider/agent-model" \
 JUDGE_MODEL="provider/judge-model" \
-python -m evals.weather_tool.eval_multi_turn
+deepeval test run evals/weather_tool/test_agent_responses.py
 ```
 
 `EVAL_MODEL` controls the agent being evaluated. `JUDGE_MODEL` controls the
-model that scores final-answer quality. If `JUDGE_MODEL` is omitted, it defaults
-to the agent model and prints a warning; using a separate pinned judge is more
+DeepEval `GEval` metric that scores final-answer quality. If `JUDGE_MODEL` is
+omitted, it defaults to the agent model. A separate pinned judge is more
 reliable.
 
 For each case, the evaluator verifies:
@@ -343,13 +349,36 @@ For each case, the evaluator verifies:
   result.
 - The final answer did not add unsupported weather claims.
 
-The judge scores task completion, factual consistency, and clarity from 0 to 2.
-A case passes only when both the deterministic tool-trace checks and the judge
-pass. The current suite contains three cases and normally makes at least nine
-model requests: two agent turns and one judge turn per case.
+A case passes only when the strict tool metric and the grounded-answer metric
+both pass. DeepEval returns a nonzero exit code when any case fails and prints
+the score and reason for each metric.
 
-### Exit codes
+### Evaluating multi-turn conversations
 
-- `0`: all cases passed.
-- `1`: one or more cases failed.
-- `2`: `OPENROUTER_API_KEY` is missing.
+The multi-turn suite reuses one `ChatApplication` instance across several user
+messages so its conversation history is exercised. Each user and assistant
+message becomes a DeepEval `Turn`; tool calls are attached to the assistant turn
+that caused them.
+
+Run it with:
+
+```bash
+EVAL_MODEL="provider/agent-model" \
+JUDGE_MODEL="provider/judge-model" \
+deepeval test run evals/weather_tool/test_multi_turn_conversations.py
+```
+
+The three scenarios cover:
+
+- Resolving a follow-up question that does not repeat the city.
+- Retaining weather details across progressive follow-up questions.
+- Switching cities and comparing results without mixing their contexts.
+
+Each conversation is evaluated with DeepEval's `ConversationCompletenessMetric`
+for user-intention coverage, `ToolUseMetric` for tool selection and arguments
+across turns, and `ConversationalGEval` for scenario-specific memory and
+grounding.
+
+DeepEval may create local run data under `.deepeval/`; this directory is ignored
+by Git. Set `DEEPEVAL_TELEMETRY_OPT_OUT=1` if you also want to disable anonymous
+DeepEval usage telemetry.
