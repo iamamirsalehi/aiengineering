@@ -10,3 +10,4 @@ Hands-on AI engineering projects and experiments, organized by week.
 
 - [AI Agent Evaluation](https://deepeval.com/guides/guides-ai-agent-evaluation)
 - [How context windows work](https://www.youtube.com/watch?v=-uW5-TaVXu4)
+- [Understand how LLM tokens work](https://www.youtube.com/watch?v=nKSk_TiR8YA)
